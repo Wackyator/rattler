@@ -14,7 +14,7 @@ use std::{
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyVersion {
-    inner: Version,
+    pub(crate) inner: Version,
 }
 
 impl From<Version> for PyVersion {

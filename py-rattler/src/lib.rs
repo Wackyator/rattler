@@ -14,7 +14,7 @@ use error::{
 };
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
-use repo_data::package_record::PyPackageRecord;
+use repo_data::package_record::{PyPackageName, PyPackageRecord};
 use version::PyVersion;
 
 use pyo3::prelude::*;
@@ -26,6 +26,7 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyMatchSpec>().unwrap();
     m.add_class::<PyNamelessMatchSpec>().unwrap();
 
+    m.add_class::<PyPackageName>().unwrap();
     m.add_class::<PyPackageRecord>().unwrap();
 
     m.add_class::<PyFetchRepoDataOptions>().unwrap();
