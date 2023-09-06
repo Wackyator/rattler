@@ -14,6 +14,7 @@ use reqwest::{
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
+    sync::Arc,
     time::SystemTime,
 };
 use tempfile::NamedTempFile;
@@ -136,14 +137,14 @@ impl Variant {
 }
 
 /// Additional knobs that allow you to tweak the behavior of [`fetch_repo_data`].
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct FetchRepoDataOptions {
     /// How to use the cache. By default it will cache and reuse downloaded repodata.json (if the
     /// server allows it).
     pub cache_action: CacheAction,
 
     /// A function that is called during downloading of the repodata.json to report progress.
-    pub download_progress: Option<Box<dyn FnMut(DownloadProgress) + Send>>,
+    pub download_progress: Option<Arc<Box<dyn FnMut(DownloadProgress) + Send + Sync>>>,
 
     /// Determines which variant to download. See [`Variant`] for more information.
     pub variant: Variant,
@@ -578,16 +579,20 @@ async fn stream_and_decode_to_file(
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
-    mut progress: Option<Box<dyn FnMut(DownloadProgress) + Send>>,
+    mut progress: Option<Arc<Box<dyn FnMut(DownloadProgress) + Send + Sync>>>,
 ) -> Result<(NamedTempFile, blake2::digest::Output<Blake2b256>), FetchRepoDataError> {
     // Determine the length of the response in bytes and notify the listener that a download is
     // starting. The response may be compressed. Decompression happens below.
     let content_size = response.content_length();
-    if let Some(progress) = progress.as_mut() {
-        progress(DownloadProgress {
-            bytes: 0,
-            total: content_size,
-        })
+    if let Some(progress) = &mut progress {
+        let progress =
+            Arc::<Box<dyn FnMut(DownloadProgress) + std::marker::Send + Sync>>::get_mut(progress);
+        if let Some(progress) = progress {
+            progress(DownloadProgress {
+                bytes: 0,
+                total: content_size,
+            })
+        }
     }
 
     // Determine the encoding of the response
@@ -605,11 +610,17 @@ async fn stream_and_decode_to_file(
     let total_bytes_mut = &mut total_bytes;
     let bytes_stream = bytes_stream.inspect_ok(move |bytes| {
         *total_bytes_mut += bytes.len() as u64;
-        if let Some(progress) = progress.as_mut() {
-            progress(DownloadProgress {
-                bytes: *total_bytes_mut,
-                total: content_size,
-            })
+        if let Some(progress) = &mut progress {
+            let progress =
+                Arc::<Box<dyn FnMut(DownloadProgress) + std::marker::Send + Sync>>::get_mut(
+                    progress,
+                );
+            if let Some(progress) = progress {
+                progress(DownloadProgress {
+                    bytes: *total_bytes_mut,
+                    total: content_size,
+                })
+            }
         }
     });
 
